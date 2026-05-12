@@ -1,0 +1,187 @@
+#include "key.h"
+#include "main.h"  // 包含GPIO定义等
+#include "stm32f1xx_hal.h"   // 根据实际库调整，若使用标准库可替换为相应头文件
+
+// 按键硬件映射表：GPIO端口，引脚， 有效电平（假设低电平有效）
+typedef struct {
+    GPIO_TypeDef* port;
+    uint16_t pin;
+    uint8_t active_level;  // 0=低电平按下, 1=高电平按下
+} key_hw_t;
+
+// 根据实际电路修改： KEY_0~KEY_8对应的GPIO
+static const key_hw_t key_hw_map[KEY_COUNT] = {
+    {KEY0_GPIO_Port, KEY0_Pin, 0},   // 假设宏定义由CubeMX生成
+    {KEY1_GPIO_Port, KEY1_Pin, 0},
+    {KEY2_GPIO_Port, KEY2_Pin, 0},
+    {KEY3_GPIO_Port, KEY3_Pin, 0},
+    {KEY4_GPIO_Port, KEY4_Pin, 0},
+    {KEY5_GPIO_Port, KEY5_Pin, 0},
+    {KEY6_GPIO_Port, KEY6_Pin, 0},
+    {KEY7_GPIO_Port, KEY7_Pin, 0},
+    {KEY8_GPIO_Port, KEY8_Pin, 0},
+};
+
+// 每个按键的状态机结构
+typedef struct {
+    uint8_t raw_state;          // 原始电平（本次扫描）
+    uint8_t debounce_cnt;       // 消抖计数器
+    uint8_t stable_state;       // 稳定后的状态（0释放，1按下）
+    
+    uint32_t press_tick;        // 按键按下的时间戳（ms）
+    uint32_t last_repeat_tick;  // 上次重复触发的时间戳
+    bool is_long_press_triggered; // 是否已经触发过长按事件
+} KeyState_t;
+
+static KeyState_t keys[KEY_COUNT];
+
+// 全局回调
+static KeyEventCallback_t event_callback = NULL;
+
+// 组合键检测相关
+static uint32_t combo_mask = 0;         // 当前按下的组合键掩码（bit i表示第i键按下）
+static uint32_t combo_start_tick = 0;   // 组合键开始记录的时间戳（第一个键按下）
+static bool combo_pending = false;      // 是否正在等待组合键
+
+// 更新单个按键状态机
+static void UpdateKeyState(KeyId_t id, uint32_t now_ms) {
+    const key_hw_t* hw = &key_hw_map[id];
+    GPIO_PinState state = HAL_GPIO_ReadPin(hw->port, hw->pin);
+    uint8_t raw = (state == GPIO_PIN_SET) ? 1 : 0;
+    // 根据有效电平转换为逻辑值：1表示按下，0表示释放
+    raw = (hw->active_level == 0) ? (1 - raw) : raw;
+
+    // 消抖处理
+    if (raw == keys[id].stable_state) {
+        keys[id].debounce_cnt = 0;
+    } else {
+        keys[id].debounce_cnt++;
+        if (keys[id].debounce_cnt >= KEY_DEBOUNCE_TICKS) {
+            // 状态翻转
+            keys[id].stable_state = raw;
+            keys[id].debounce_cnt = 0;
+            
+            // 触发释放事件或按下事件（用于组合键检测和长按计时）
+            if (raw == 1) { // 按下（假设按下为高电平，根据实际电路可调整）
+                keys[id].press_tick = now_ms;
+                keys[id].last_repeat_tick = now_ms;
+                keys[id].is_long_press_triggered = false;
+            } else { // 释放
+                // 如果之前没有触发过长按，则认为是短按
+                if (!keys[id].is_long_press_triggered && event_callback) {
+                    event_callback(KEY_EVENT_PRESS, id);
+                }
+                // 无论长短按，释放事件总是触发
+                if (event_callback) {
+                    event_callback(KEY_EVENT_RELEASE, id);
+                }
+            }
+        }
+    }
+    
+    // 长按检测（仅在稳态按下时）
+    if (keys[id].stable_state == 1) {
+        uint32_t press_duration = now_ms - keys[id].press_tick;
+        if (!keys[id].is_long_press_triggered && press_duration >= KEY_LONG_PRESS_MS) {
+            keys[id].is_long_press_triggered = true;
+            if (event_callback) {
+                event_callback(KEY_EVENT_LONG_PRESS, id);
+            }
+        }
+        // 长按重复触发（每隔一定时间）
+        if (keys[id].is_long_press_triggered && (now_ms - keys[id].last_repeat_tick) >= KEY_REPEAT_INTERVAL_MS) {
+            keys[id].last_repeat_tick = now_ms;
+            if (event_callback) {
+                event_callback(KEY_EVENT_REPEAT, id);
+            }
+        }
+    }
+}
+
+// 组合键检测（应在所有按键状态更新后，主循环中调用）
+static void CheckCombo(uint32_t now_ms) {
+    // 构建当前按下的按键掩码
+    uint32_t current_mask = 0;
+    for (int i = 0; i < KEY_COUNT; i++) {
+        if (keys[i].stable_state == 1) {
+            current_mask |= (1 << i);
+        }
+    }
+    
+    if (current_mask == 0) {
+        // 无按键按下，清除组合键等待状态
+        combo_pending = false;
+        combo_mask = 0;
+        return;
+    }
+    
+    // 有按键按下
+    if (!combo_pending) {
+        // 开始新的组合键检测
+        combo_pending = true;
+        combo_mask = current_mask;
+        combo_start_tick = now_ms;
+    } else {
+        // 更新组合键掩码（取并集）
+        combo_mask |= current_mask;
+        // 如果组合键掩码包含多个位，并且超时未到，可以触发组合键事件
+        if (__builtin_popcount(combo_mask) >= 2) {   // GNU扩展，计算bit数; 若不用可自行替换
+            // 触发组合键事件
+            if (event_callback) {
+                event_callback(KEY_EVENT_COMBO, combo_mask);
+            }
+            combo_pending = false;  // 已触发，不再重复
+            combo_mask = 0;
+        } else if ((now_ms - combo_start_tick) >= KEY_COMBO_TIMEOUT_MS) {
+            // 超时，只按下一个键，由普通按键事件处理，不触发组合键
+            combo_pending = false;
+            combo_mask = 0;
+        }
+    }
+}
+
+// 定时器扫描函数（应在定时器中断中每隔KEY_SCAN_INTERVAL_MS调用一次）
+void Key_TimerScan(void) {
+    static uint32_t last_scan_tick = 0;
+    uint32_t now = HAL_GetTick();
+    if ((now - last_scan_tick) < KEY_SCAN_INTERVAL_MS) return;
+    last_scan_tick = now;
+    
+    for (uint8_t i = 0; i < KEY_COUNT; i++) {
+        UpdateKeyState(i, now);
+    }
+}
+
+// 后台处理（主循环调用，处理组合键超时等）
+void Key_Process(void) {
+    uint32_t now = HAL_GetTick();
+    if (combo_pending && ((now - combo_start_tick) >= KEY_COMBO_TIMEOUT_MS)) {
+        combo_pending = false;
+        combo_mask = 0;
+    }
+}
+
+// 获取按键稳定状态
+uint8_t Key_GetState(KeyId_t id) {
+    if (id >= KEY_COUNT) return 0;
+    return keys[id].stable_state;
+}
+
+// 注册回调
+void Key_RegisterCallback(KeyEventCallback_t cb) {
+    event_callback = cb;
+}
+
+// 主初始化
+void Key_Init(void) {
+    // 清零按键状态
+    for (int i = 0; i < KEY_COUNT; i++) {
+        keys[i].stable_state = 0;
+        keys[i].debounce_cnt = 0;
+        keys[i].press_tick = 0;
+        keys[i].last_repeat_tick = 0;
+        keys[i].is_long_press_triggered = false;
+    }
+    combo_mask = 0;
+    combo_pending = false;
+}
