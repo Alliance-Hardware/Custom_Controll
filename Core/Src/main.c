@@ -31,6 +31,7 @@
 #include "ws2812b.h"
 #include "encoder.h"
 #include "custom_input_mapper.h"
+#include "controller_to_keymouse.h"
 #include <stdint.h>
 /* USER CODE END Includes */
 
@@ -46,13 +47,14 @@
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-
+void MyKeyCallback(KeyEvent_t event, uint32_t param);      // 按键事件回调函数：根据事件类型发送串口数据、控制RGB等
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-
+static uint8_t key_param = 0;           // 按键事件参数：0-9分别对应9个按键，0表示无效
+static uint8_t encoder_param = 0;       // 编码器事件参数：0-2分别对应3个编码器状态，0表示无效，1表示进入买弹面板,2表示进入确认界面 
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -106,6 +108,9 @@ int main(void)
   OLED_Init();
   ws2812b_init();
   Key_Init();
+  custom_input_init();
+  Key_RegisterCallback(MyKeyCallback);
+  HAL_TIM_Base_Start_IT(&htim2);
   /* USER CODE END 2 */
   OLED_ColorTurn(0);              // 正常显示
   OLED_DisplayTurn(0);            // 不翻转
@@ -116,26 +121,126 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-    // 方法1：获取自上次读取以来的增量
-        int16_t step = encoder_get_count();
-        if (step != 0) {
-            // step > 0 右旋，< 0 左旋
-            OLED_ShowNum(0, 0, (uint32_t)step, 5, 16, 0);
-            OLED_Refresh();
-        }
 
-        // 方法2：获取总计数
-        int32_t total = encoder_get_total_count();
-        if (total != last_total) {
-            OLED_ShowNum(0, 1, (uint32_t)total, 5, 16, 0);
-            OLED_Refresh();
-            last_total = total;
-        }
+    switch (key_param) {
+      case 0:   break;
+      case 1:   // 发送10弹操作：按下10弹键，点击对应位置，发送确认序列，点亮LED
+        buy_ammo_generic(10);
+        ws2812b_set_color(2, 0, 0, 255);  // 设置LED颜色为红色
+        ws2812b_show();  // 刷新LED显示
+        key_param = 0; 
+        break;  
+      case 2:   // 发送50弹操作：按下50弹键，点击对应位置，发送确认序列，点亮LED 
+        buy_ammo_generic(50);
+        ws2812b_set_color(1, 0, 0, 255);  // 设置LED颜色为红色
+        ws2812b_show();  // 刷新LED显示
+        key_param = 0; 
+        break;
+      case 3:   // 发送100弹操作：按下100弹键，点击对应位置，发送确认序列，点亮LED
+        buy_ammo_generic(100);
+        ws2812b_set_color(0, 0, 0, 255);  // 设置LED颜色为红色
+        ws2812b_show();  // 刷新LED显示
+        key_param = 0; 
+        break;
+      case 4:   
+        
+        ws2812b_set_color(3, 0, 0, 255);  // 设置LED颜色为红色
+        ws2812b_show();  // 刷新LED显示
+        key_param = 0; 
+        break;
+      case 5:  
+        
+        ws2812b_set_color(4, 0, 0, 255);  // 设置LED颜色为红色
+        ws2812b_show();  // 刷新LED显示
 
-        HAL_Delay(10); // 10ms循环一次
+        key_param = 0; 
+        break;
+      case 6:  
+        
+        ws2812b_set_color(5, 0, 0, 255);  // 设置LED颜色为红色
+        ws2812b_show();  // 刷新LED显示
+        key_param = 0; 
+        break;
+      case 7:  
+        
+        ws2812b_set_color(8, 0, 0, 255);  // 设置LED颜色为红色
+        ws2812b_show();  // 刷新LED显示
+        key_param = 0; 
+        break;
+      case 8:  
+        
+        ws2812b_set_color(7, 0, 0, 255);  // 设置LED颜色为红色
+        ws2812b_show();  // 刷新LED显示
+        key_param = 0; 
+        break;
+      case 9:
+        ws2812b_set_color(6, 0, 0, 255);  // 设置LED颜色为红色
+        ws2812b_show();  // 刷新LED显示
+        key_param = 0; 
+        break;
+      default:  key_param = 0; break;
+    
+    }
+
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
+}
+
+//定时器中断回调函数：每 5ms 调用一次按键扫描函数
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+    if (htim->Instance == TIM2) {
+        Key_UpdateTick();   // 更新时间戳
+        Key_TimerScan();   // 每 5ms 调用一次按键扫描
+    }
+}
+
+//外部中断回调函数：将外部中断事件传递给按键处理函数
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
+    if(GPIO_Pin == GPIO_PIN_11) {   // 处理按键事件
+        if (encoder_param == 0) {
+          encoder_param = 1;   // 进入买弹面板
+        }else if (encoder_param == 1) {
+          encoder_param = 2;   // 进入确认界面
+        }else {
+          encoder_param = 0;   // 重置编码器事件参数
+        }
+    }
+}
+
+// 按键事件回调函数：根据事件类型发送串口数据、控制RGB等
+void MyKeyCallback(KeyEvent_t event, uint32_t param) {
+  switch (event) {
+        case KEY_EVENT_PRESS:        // 短按
+            switch (param) {
+              case 0:  key_param = 1; break;
+              case 1:  key_param = 2; break;
+              case 2:  key_param = 3; break;
+              case 3:  key_param = 4; break;
+              case 4:  key_param = 5; break;
+              case 5:  key_param = 6; break;
+              case 6:  key_param = 7; break;
+              case 7:  key_param = 8; break;
+              case 8:  key_param = 9; break;
+              default:  key_param = 0; break;
+            }            
+            break;
+        case KEY_EVENT_LONG_PRESS:    // 长按
+            
+            break;
+        case KEY_EVENT_REPEAT:        // 长按重复触发
+            
+            break;
+        case KEY_EVENT_RELEASE:
+            // 释放可做额外处理
+            break;
+        case KEY_EVENT_COMBO:         // 组合键，param为bitmask
+            
+            break;
+        default:
+            break;
+    }
 }
 
 /**

@@ -43,28 +43,45 @@ static uint32_t combo_mask = 0;         // 当前按下的组合键掩码（bit 
 static uint32_t combo_start_tick = 0;   // 组合键开始记录的时间戳（第一个键按下）
 static bool combo_pending = false;      // 是否正在等待组合键
 
+// ========== 新增：独立的时间基准 ==========
+static volatile uint32_t key_ticks_ms = 0;   // 由 Key_UpdateTick() 累加
+
+// 供外部定时器中断调用的时间更新函数
+void Key_UpdateTick(void)
+{
+    key_ticks_ms += KEY_SCAN_INTERVAL_MS;
+}
+
+// 获取当前按键模块内部时间戳（用于内部函数）
+static inline uint32_t Key_GetTick(void)
+{
+    return key_ticks_ms;
+}
+
 // 更新单个按键状态机
-static void UpdateKeyState(KeyId_t id, uint32_t now_ms) {
+static void UpdateKeyState(KeyId_t id) {
     const key_hw_t* hw = &key_hw_map[id];
     GPIO_PinState state = HAL_GPIO_ReadPin(hw->port, hw->pin);
     uint8_t raw = (state == GPIO_PIN_SET) ? 1 : 0;
     // 根据有效电平转换为逻辑值：1表示按下，0表示释放
-    raw = (hw->active_level == 0) ? (1 - raw) : raw;
+    keys[id].raw_state = (hw->active_level == 0) ? (1 - raw) : raw;
+
+    uint32_t now = Key_GetTick();   // 使用内部时间戳
 
     // 消抖处理
-    if (raw == keys[id].stable_state) {
+    if (keys[id].raw_state == keys[id].stable_state) {
         keys[id].debounce_cnt = 0;
     } else {
         keys[id].debounce_cnt++;
         if (keys[id].debounce_cnt >= KEY_DEBOUNCE_TICKS) {
             // 状态翻转
-            keys[id].stable_state = raw;
+            keys[id].stable_state = keys[id].raw_state;
             keys[id].debounce_cnt = 0;
             
             // 触发释放事件或按下事件（用于组合键检测和长按计时）
-            if (raw == 1) { // 按下（假设按下为高电平，根据实际电路可调整）
-                keys[id].press_tick = now_ms;
-                keys[id].last_repeat_tick = now_ms;
+            if (keys[id].raw_state == 1) { // 按下（假设按下为高电平，根据实际电路可调整）
+                keys[id].press_tick = now;
+                keys[id].last_repeat_tick = now;
                 keys[id].is_long_press_triggered = false;
             } else { // 释放
                 // 如果之前没有触发过长按，则认为是短按
@@ -81,7 +98,7 @@ static void UpdateKeyState(KeyId_t id, uint32_t now_ms) {
     
     // 长按检测（仅在稳态按下时）
     if (keys[id].stable_state == 1) {
-        uint32_t press_duration = now_ms - keys[id].press_tick;
+        uint32_t press_duration = now - keys[id].press_tick;
         if (!keys[id].is_long_press_triggered && press_duration >= KEY_LONG_PRESS_MS) {
             keys[id].is_long_press_triggered = true;
             if (event_callback) {
@@ -89,8 +106,8 @@ static void UpdateKeyState(KeyId_t id, uint32_t now_ms) {
             }
         }
         // 长按重复触发（每隔一定时间）
-        if (keys[id].is_long_press_triggered && (now_ms - keys[id].last_repeat_tick) >= KEY_REPEAT_INTERVAL_MS) {
-            keys[id].last_repeat_tick = now_ms;
+        if (keys[id].is_long_press_triggered && (now - keys[id].last_repeat_tick) >= KEY_REPEAT_INTERVAL_MS) {
+            keys[id].last_repeat_tick = now;
             if (event_callback) {
                 event_callback(KEY_EVENT_REPEAT, id);
             }
@@ -99,7 +116,9 @@ static void UpdateKeyState(KeyId_t id, uint32_t now_ms) {
 }
 
 // 组合键检测（应在所有按键状态更新后，主循环中调用）
-static void CheckCombo(uint32_t now_ms) {
+static void CheckCombo(void) {
+    uint32_t now_ms = Key_GetTick();   // 使用内部时间戳
+
     // 构建当前按下的按键掩码
     uint32_t current_mask = 0;
     for (int i = 0; i < KEY_COUNT; i++) {
@@ -142,13 +161,9 @@ static void CheckCombo(uint32_t now_ms) {
 
 // 定时器扫描函数（应在定时器中断中每隔KEY_SCAN_INTERVAL_MS调用一次）
 void Key_TimerScan(void) {
-    static uint32_t last_scan_tick = 0;
-    uint32_t now = HAL_GetTick();
-    if ((now - last_scan_tick) < KEY_SCAN_INTERVAL_MS) return;
-    last_scan_tick = now;
     
     for (uint8_t i = 0; i < KEY_COUNT; i++) {
-        UpdateKeyState(i, now);
+        UpdateKeyState(i);
     }
 }
 

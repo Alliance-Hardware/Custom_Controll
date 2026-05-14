@@ -103,41 +103,34 @@ void send_two_keys(uint8_t vk_code1, uint8_t vk_code2) {
     /* 组合键发送后通常需要手动释放，请调用 send_key_up(0) 或再发一次空包 */
 }
 
-// /**
-//  * @brief 鼠标点击操作
-//  * @param x X coordinate
-//  * @param y Y coordinate
-//  */
-// void send_mouse_sequence(uint16_t x, uint16_t y)
-// {
-//     custom_client_data = (custom_client_data_t){
-//         .key_value = 0,			//网上任意键值
-//         .x_position = x,
-//         .y_position = y,
-//         .mouse_left = 0,
-//         .mouse_right = 0
-//     };
-//     memcpy(client_data, &custom_client_data, 8);
-//     HAL_UART_Transmit(&huart1, referee_pack_data(0x0306, client_data, 8), getRefSentDataLen(), 30);
-//     HAL_Delay(10);
+/**
+ * @brief 鼠标点击操作
+ * @param x X coordinate
+ * @param y Y coordinate
+ */
+void send_mouse_sequence(uint16_t x, uint16_t y)
+{
+    custom_client_data_t custom_client_data = {0};
+    uint8_t client_data[8] = {0};
+    custom_client_data = (custom_client_data_t){
+        .key_value = 0,			//网上任意键值
+        .x_position = x,
+        .y_position = y,
+        .mouse_left = 0,
+        .mouse_right = 0
+    };
+    memcpy(client_data, &custom_client_data, 8);
+    HAL_UART_Transmit(&huart1, referee_pack_data(0x0306, client_data, 8), getRefSentDataLen(), 30);
+    HAL_Delay(10);
     
-//     custom_client_data.mouse_left = 1;
-//     memcpy(client_data, &custom_client_data, 8);
-//     HAL_UART_Transmit(&huart1, referee_pack_data(0x0306, client_data, 8), getRefSentDataLen(), 30);
-//     HAL_Delay(10);
+    custom_client_data.mouse_left = 1;
+    memcpy(client_data, &custom_client_data, 8);
+    HAL_UART_Transmit(&huart1, referee_pack_data(0x0306, client_data, 8), getRefSentDataLen(), 30);
+    HAL_Delay(10);
     
-//     custom_client_data.mouse_left = 0;
-//     memcpy(client_data, &custom_client_data, 8);
-//     HAL_UART_Transmit(&huart1, referee_pack_data(0x0306, client_data, 8), getRefSentDataLen(), 30);
-//     HAL_Delay(10);
-// }
+    custom_client_data.mouse_left = 0;
+    memcpy(client_data, &custom_client_data, 8);
+    HAL_UART_Transmit(&huart1, referee_pack_data(0x0306, client_data, 8), getRefSentDataLen(), 30);
+    HAL_Delay(10);
+}
 
-// /**
-//  * @brief Sends the common mouse sequence shared by all keys
-//  */
-// void send_common_sequence(void)
-// {
-//     send_mouse_sequence(common_positions[0].x_pos, common_positions[0].y_pos);
-    
-//     send_mouse_sequence(common_positions[1].x_pos, common_positions[1].y_pos);
-// }

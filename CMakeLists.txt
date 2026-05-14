@@ -45,11 +45,12 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
-    User/Src/custom_input_mapper.c
-    User/Src/key.c
-    User/Src/oled.c
-    User/Src/ws2812b.c
-    User/Src/encoder.c
+    User/APP/Src/controller_to_keymouse.c
+    User/Drv/Src/custom_input_mapper.c
+    User/Drv/Src/key.c
+    User/Drv/Src/oled.c
+    User/Drv/Src/ws2812b.c
+    User/Drv/Src/encoder.c
     rm_referee_system/Src/client_ui_plot.c
     rm_referee_system/Src/crc8_crc16.c
     rm_referee_system/Src/fifo.c
@@ -61,7 +62,8 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
-    User/Inc
+    User/APP/Inc
+    User/Drv/Inc
     rm_referee_system/Inc
 )
 

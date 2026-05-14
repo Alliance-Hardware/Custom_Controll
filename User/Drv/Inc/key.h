@@ -56,4 +56,11 @@ void Key_TimerScan(void);
 // 获取按键当前稳定状态（0=释放，1=按下）
 uint8_t Key_GetState(KeyId_t id);
 
+/**
+ * @brief 更新时间基准（由定时器中断周期性调用）
+ * @note  定时器中断周期应为 KEY_SCAN_INTERVAL_MS (5ms)
+ *        每次中断调用该函数，使内部时间戳增加 KEY_SCAN_INTERVAL_MS
+ */
+void Key_UpdateTick(void);
+
 #endif

@@ -141,8 +141,7 @@ void send_key_press(uint8_t vk_code);
 /* 发送两个键值（组合键，高位字节为键值2，低位字节为键值1） */
 void send_two_keys(uint8_t vk_code1, uint8_t vk_code2);
 
-
-// void send_mouse_sequence(uint16_t x, uint16_t y);
-// void send_common_sequence(void);
+/* 鼠标移动点击操作 */
+void send_mouse_sequence(uint16_t x, uint16_t y);
 
 #endif /* __CUSTOM_INPUT_MAPPER_H__ */

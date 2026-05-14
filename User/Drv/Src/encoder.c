@@ -1,9 +1,12 @@
 #include "encoder.h"
 #include "stm32f1xx_hal.h"
 #include "tim.h"
+#include <stdint.h>
 
 static int32_t total_overflow = 0;   // 处理16位计数器溢出
 static int16_t last_count = 0;       // 上次读取的计数值
+static int32_t total_max = 300;      // 最大计数值
+static int32_t total_min = 0;        // 最小计数值
 
 // TIM3 初始化（编码器模式）
 void encoder_init(void) {
@@ -15,7 +18,15 @@ void encoder_init(void) {
 int16_t encoder_get_count(void) {
     int16_t current = (int16_t)TIM4->CNT;
     int16_t delta = current - last_count;
+
+    // 更新总计数，确保不小于 total_min且不大于 total_max
     total_overflow += delta;
+    if (total_overflow < total_min) {
+        total_overflow = total_min;
+    }else if (total_overflow > total_max) {
+        total_overflow = total_max;
+    }
+
     last_count = current;
     return delta;
 }
