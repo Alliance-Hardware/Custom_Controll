@@ -10,10 +10,16 @@
 void buy_ammo_generic(uint16_t num);
 
 /**
- * @brief 购买指定数量弹药
+ * @brief 购买指定数量17mm弹药
  * @param num  要购买的弹药数量
  */
-void buy_ammo(uint16_t num);
+void buy_17mmammo(uint16_t num);
+
+/**
+ * @brief 购买指定数量42mm弹药
+ * @param num  要购买的弹药数量
+ */
+void buy_42mmammo(uint16_t num);
 
 /**
  * @brief 买单确认操作：依次点击确认界面上的两个按钮

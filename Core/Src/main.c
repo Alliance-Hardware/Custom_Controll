@@ -115,7 +115,7 @@ int main(void)
   /* USER CODE END 2 */
   OLED_ColorTurn(0);              // 正常显示
   OLED_DisplayTurn(0);            // 不翻转
-  OLED_ShowNum(0, 0, 17, 2, 16, 0);
+  OLED_ShowNum(0, 0, 42, 2, 16, 0);
   OLED_ShowString(16, 0, "mmAmmo:", 16, 0);
   OLED_Refresh();  // 刷新OLED显示
   int32_t last_total = 0;
@@ -127,18 +127,18 @@ int main(void)
 
     switch (key_param) {
       case 0:   break;
-      case 1:   // 发送10弹操作：按下10弹键，点击对应位置，发送确认序列，点亮LED
-        buy_ammo(10);
+      case 1:   // 发送1弹操作：按下1弹键，点击对应位置，发送确认序列，点亮LED
+        buy_42mmammo(1);
         
         key_param = 0; 
         break;  
-      case 2:   // 发送50弹操作：按下50弹键，点击对应位置，发送确认序列，点亮LED 
-        buy_ammo(50);
+      case 2:   // 发送5弹操作：按下5弹键，点击对应位置，发送确认序列，点亮LED 
+        buy_42mmammo(5);
         
         key_param = 0; 
         break;
-      case 3:   // 发送100弹操作：按下100弹键，点击对应位置，发送确认序列，点亮LED
-        buy_ammo(100);
+      case 3:   // 发送10弹操作：按下10弹键，点击对应位置，发送确认序列，点亮LED
+        buy_42mmammo(10);
         
         key_param = 0; 
         break;
@@ -178,7 +178,7 @@ int main(void)
     if (encoder_param == 0) {
       // 无效状态，等待事件触发
     } else if (encoder_param == 1) {
-      buy_ammo(last_total);  // 进入买弹面板：点击对应位置，发送打开购买界面序列
+      buy_42mmammo(last_total);  // 进入买弹面板：点击对应位置，发送打开购买界面序列
       encoder_param = 0;   // 重置编码器事件参数，等待旋转事件
 
       for (int i = 0; i < NUM_LEDS; i++) {
@@ -192,9 +192,9 @@ int main(void)
       int16_t step = encoder_get_count();
       int32_t total = encoder_get_total_count();
       if (step != 0) {         
-          last_total += step * 10;  // 每步增加10弹
+          last_total += step;  // 每步增加1弹
           if (last_total < 0) last_total = 0;  // 不允许负数
-          if (last_total > 300) last_total = 300;  // 最大300弹       
+          if (last_total > 80) last_total = 80;  // 最大80弹       
       }
 
       OLED_ShowNum(72, 0, last_total, 3, 16, 0);  // 在OLED上显示弹药数量

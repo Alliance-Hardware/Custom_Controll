@@ -46,15 +46,15 @@ void buy_ammo_generic(uint16_t num){
 }
 
 /**
- * @brief 购买指定数量弹药（正数，10~300，步长10）
+ * @brief 购买指定数量17mm弹药（正数，10~300，步长10）
  * @param target 目标数量（10,20,...,300）
  */
-void buy_ammo(uint16_t target){
+void buy_17mmammo(uint16_t target){
     if (target < 10 || target > 300 || target % 10 != 0) {
         return; // 无效参数
     }
 
-    send_key_press(VK_I);  // 发送按键操作（如打开购买界面）
+    send_key_press(VK_O);  // 发送按键操作（如打开购买界面）
 
     // 按从大到小的顺序分解数量：100, 50, 20, 10
     uint16_t remaining = target;
@@ -71,6 +71,39 @@ void buy_ammo(uint16_t target){
         } else if (remaining >= 10) {
             buy_ammo_generic(10);
             remaining -= 10;
+        }
+    }
+
+    // 购买完成后确认（例如点击“确认”按钮）
+    purchase_confirm();  // 你原有的确认序列函数
+}
+
+/**
+ * @brief 购买指定数量42mm弹药（正数，1~80，步长1）
+ * @param target 目标数量（1,2,...,80）
+ */
+void buy_42mmammo(uint16_t target){
+    if (target < 1 || target > 80) {
+        return; // 无效参数
+    }
+
+    send_key_press(VK_I);  // 发送按键操作（如打开购买界面）
+
+    // 按从大到小的顺序分解数量：10, 5, 2, 1
+    uint16_t remaining = target;
+    while (remaining > 0) {
+        if (remaining >= 10) {
+            buy_ammo_generic(100);
+            remaining -= 10;
+        } else if (remaining >= 5) {
+            buy_ammo_generic(50);
+            remaining -= 5;
+        } else if (remaining >= 2) {
+            buy_ammo_generic(20);
+            remaining -= 2;
+        } else if (remaining >= 1) {
+            buy_ammo_generic(10);
+            remaining -= 1;
         }
     }
 
