@@ -9,7 +9,7 @@ typedef struct {
     uint8_t active_level;  // 0=低电平按下, 1=高电平按下
 } key_hw_t;
 
-// 根据实际电路修改： KEY_0~KEY_8对应的GPIO
+// 根据实际电路修改： KEY_0~KEY_9对应的GPIO
 static const key_hw_t key_hw_map[KEY_COUNT] = {
     {KEY0_GPIO_Port, KEY0_Pin, 0},   // 假设宏定义由CubeMX生成
     {KEY1_GPIO_Port, KEY1_Pin, 0},
@@ -20,6 +20,7 @@ static const key_hw_t key_hw_map[KEY_COUNT] = {
     {KEY6_GPIO_Port, KEY6_Pin, 0},
     {KEY7_GPIO_Port, KEY7_Pin, 0},
     {KEY8_GPIO_Port, KEY8_Pin, 0},
+        {ENCODER_GPIO_Port, ENCODER_Pin, 0}  // 编码器按键也作为一个按键处理
 };
 
 // 每个按键的状态机结构
@@ -28,9 +29,14 @@ typedef struct {
     uint8_t debounce_cnt;       // 消抖计数器
     uint8_t stable_state;       // 稳定后的状态（0释放，1按下）
     
-    uint32_t press_tick;        // 按键按下的时间戳（ms）
-    uint32_t last_repeat_tick;  // 上次重复触发的时间戳
-    bool is_long_press_triggered; // 是否已经触发过长按事件
+    uint32_t press_tick;             // 按键按下的时间戳（ms）
+    uint32_t last_repeat_tick;       // 上次重复触发的时间戳
+    bool is_long_press_triggered;    // 是否已经触发过长按事件
+
+    // 以下为双击专用（启用双击的按键才会使用）
+    uint32_t last_release_tick;      // 上次释放的时间戳（ms）
+    bool double_click_pending;       // 是否正在等待第二次按下（双击待确认）
+    bool is_double_click_expected;   // 第二次按下已发生
 } KeyState_t;
 
 static KeyState_t keys[KEY_COUNT];
@@ -58,6 +64,11 @@ static inline uint32_t Key_GetTick(void)
     return key_ticks_ms;
 }
 
+// 判断是否启用双击检测（根据按键ID）
+static inline bool is_double_click_enabled(KeyId_t id) {
+    return (KEY_DOUBLE_CLICK_ENABLE_MASK & (1 << id)) != 0;
+}
+
 // 更新单个按键状态机
 static void UpdateKeyState(KeyId_t id) {
     const key_hw_t* hw = &key_hw_map[id];
@@ -80,13 +91,33 @@ static void UpdateKeyState(KeyId_t id) {
             
             // 触发释放事件或按下事件（用于组合键检测和长按计时）
             if (keys[id].raw_state == 1) { // 按下（假设按下为高电平，根据实际电路可调整）
+                // 如果当前处于双击等待状态（说明第二次按下开始）
+                if (keys[id].double_click_pending) {
+                    keys[id].double_click_pending = false;
+                    keys[id].is_double_click_expected = true;   // 标记第二次按下已发生
+                }
                 keys[id].press_tick = now;
                 keys[id].last_repeat_tick = now;
                 keys[id].is_long_press_triggered = false;
             } else { // 释放
                 // 如果之前没有触发过长按，则认为是短按
                 if (!keys[id].is_long_press_triggered && event_callback) {
-                    event_callback(KEY_EVENT_PRESS, id);
+                    if (keys[id].is_double_click_expected) {
+                        // 第二次释放 -> 双击
+                        keys[id].is_double_click_expected = false;
+                        if (event_callback) {
+                            event_callback(KEY_EVENT_DOUBLE_CLICK, id);
+                        }
+                    } else if (is_double_click_enabled(id)) {
+                        // 启用双击，第一次释放 -> 等待第二次按下
+                        keys[id].last_release_tick = now;
+                        keys[id].double_click_pending = true;
+                    } else {
+                        // 未启用双击 -> 立即触发短按
+                        if (event_callback) {
+                            event_callback(KEY_EVENT_PRESS, id);
+                        }
+                    }
                 }
                 // 无论长短按，释放事件总是触发
                 if (event_callback) {
@@ -110,6 +141,17 @@ static void UpdateKeyState(KeyId_t id) {
             keys[id].last_repeat_tick = now;
             if (event_callback) {
                 event_callback(KEY_EVENT_REPEAT, id);
+            }
+        }
+    }
+
+    // 双击等待超时检测（仅对启用双击的按键有效）
+    if (keys[id].double_click_pending && is_double_click_enabled(id)) {
+        if ((now - keys[id].last_release_tick) >= KEY_DOUBLE_CLICK_TIMEOUT_MS) {
+            // 超时：确认是单击
+            keys[id].double_click_pending = false;
+            if (event_callback) {
+                event_callback(KEY_EVENT_PRESS, id);
             }
         }
     }
@@ -196,6 +238,9 @@ void Key_Init(void) {
         keys[i].press_tick = 0;
         keys[i].last_repeat_tick = 0;
         keys[i].is_long_press_triggered = false;
+        keys[i].last_release_tick = 0;
+        keys[i].double_click_pending = false;
+        keys[i].is_double_click_expected = false;
     }
     combo_mask = 0;
     combo_pending = false;

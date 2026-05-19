@@ -20,6 +20,7 @@
 #include "main.h"
 #include "dma.h"
 #include "spi.h"
+#include "stm32f1xx_hal.h"
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
@@ -114,7 +115,9 @@ int main(void)
   /* USER CODE END 2 */
   OLED_ColorTurn(0);              // 正常显示
   OLED_DisplayTurn(0);            // 不翻转
-
+  OLED_ShowNum(0, 0, 17, 2, 16, 0);
+  OLED_ShowString(16, 0, "mmAmmo:", 16, 0);
+  OLED_Refresh();  // 刷新OLED显示
   int32_t last_total = 0;
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
@@ -125,63 +128,81 @@ int main(void)
     switch (key_param) {
       case 0:   break;
       case 1:   // 发送10弹操作：按下10弹键，点击对应位置，发送确认序列，点亮LED
-        buy_ammo_generic(10);
-        ws2812b_set_color(2, 0, 0, 255);  // 设置LED颜色为红色
-        ws2812b_show();  // 刷新LED显示
+        buy_ammo(10);
+        
         key_param = 0; 
         break;  
       case 2:   // 发送50弹操作：按下50弹键，点击对应位置，发送确认序列，点亮LED 
-        buy_ammo_generic(50);
-        ws2812b_set_color(1, 0, 0, 255);  // 设置LED颜色为红色
-        ws2812b_show();  // 刷新LED显示
+        buy_ammo(50);
+        
         key_param = 0; 
         break;
       case 3:   // 发送100弹操作：按下100弹键，点击对应位置，发送确认序列，点亮LED
-        buy_ammo_generic(100);
-        ws2812b_set_color(0, 0, 0, 255);  // 设置LED颜色为红色
-        ws2812b_show();  // 刷新LED显示
+        buy_ammo(100);
+        
         key_param = 0; 
         break;
       case 4:   
         
-        ws2812b_set_color(3, 0, 0, 255);  // 设置LED颜色为红色
-        ws2812b_show();  // 刷新LED显示
+        
         key_param = 0; 
         break;
       case 5:  
-        
-        ws2812b_set_color(4, 0, 0, 255);  // 设置LED颜色为红色
-        ws2812b_show();  // 刷新LED显示
+      
 
         key_param = 0; 
         break;
       case 6:  
         
-        ws2812b_set_color(5, 0, 0, 255);  // 设置LED颜色为红色
-        ws2812b_show();  // 刷新LED显示
+        
         key_param = 0; 
         break;
       case 7:  
         
-        ws2812b_set_color(8, 0, 0, 255);  // 设置LED颜色为红色
-        ws2812b_show();  // 刷新LED显示
+        
         key_param = 0; 
         break;
       case 8:  
         
-        ws2812b_set_color(7, 0, 0, 255);  // 设置LED颜色为红色
-        ws2812b_show();  // 刷新LED显示
+        
         key_param = 0; 
         break;
       case 9:
-        ws2812b_set_color(6, 0, 0, 255);  // 设置LED颜色为红色
-        ws2812b_show();  // 刷新LED显示
+        
         key_param = 0; 
         break;
       default:  key_param = 0; break;
     
     }
 
+    if (encoder_param == 0) {
+      // 无效状态，等待事件触发
+    } else if (encoder_param == 1) {
+      buy_ammo(last_total);  // 进入买弹面板：点击对应位置，发送打开购买界面序列
+      encoder_param = 0;   // 重置编码器事件参数，等待旋转事件
+
+      for (int i = 0; i < NUM_LEDS; i++) {
+          ws2812b_set_color(i, 0, 0, 255); 
+        }
+        ws2812b_show();  // 刷新LED显示
+
+    } else if (encoder_param == 2) {     
+
+      //等待旋转编码器事件：根据旋转步数计算购买数量，发送购买操作，更新OLED显示      
+      int16_t step = encoder_get_count();
+      int32_t total = encoder_get_total_count();
+      if (step != 0) {         
+          last_total += step * 10;  // 每步增加10弹
+          if (last_total < 0) last_total = 0;  // 不允许负数
+          if (last_total > 300) last_total = 300;  // 最大300弹       
+      }
+
+      OLED_ShowNum(72, 0, last_total, 3, 16, 0);  // 在OLED上显示弹药数量
+      OLED_Refresh();  // 刷新OLED显示
+      
+    } else {
+      encoder_param = 0;   // 重置编码器事件参数
+    } 
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
@@ -197,17 +218,18 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 }
 
 //外部中断回调函数：将外部中断事件传递给按键处理函数
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
-    if(GPIO_Pin == GPIO_PIN_11) {   // 处理按键事件
-        if (encoder_param == 0) {
-          encoder_param = 1;   // 进入买弹面板
-        }else if (encoder_param == 1) {
-          encoder_param = 2;   // 进入确认界面
-        }else {
-          encoder_param = 0;   // 重置编码器事件参数
-        }
-    }
-}
+// void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
+//     if(GPIO_Pin == GPIO_PIN_11) {   // 处理按键事件
+//         if (encoder_param == 0) {
+//           send_key_down(VK_O);  // 发送按键操作（如打开购买界面） 
+//           encoder_param = 1;   // 进入买弹面板
+//         }else if (encoder_param == 1) {
+//           encoder_param = 2;   // 进入确认界面
+//         }else {
+//           encoder_param = 0;   // 重置编码器事件参数
+//         }
+//     }
+// }
 
 // 按键事件回调函数：根据事件类型发送串口数据、控制RGB等
 void MyKeyCallback(KeyEvent_t event, uint32_t param) {
@@ -223,6 +245,7 @@ void MyKeyCallback(KeyEvent_t event, uint32_t param) {
               case 6:  key_param = 7; break;
               case 7:  key_param = 8; break;
               case 8:  key_param = 9; break;
+              case 9:  encoder_param = 1; break;
               default:  key_param = 0; break;
             }            
             break;
@@ -232,6 +255,19 @@ void MyKeyCallback(KeyEvent_t event, uint32_t param) {
         case KEY_EVENT_REPEAT:        // 长按重复触发
             
             break;
+        case KEY_EVENT_DOUBLE_CLICK:  // 双击事件
+            if (param == 9) {
+              encoder_reset_count();  // 重置编码器计数，准备检测旋转事件
+              encoder_param = 2;  // 编码器按键双击事件
+              for (int i = 0; i < NUM_LEDS; i++) {
+                ws2812b_set_color(i, 255, 0, 255); 
+              }
+              ws2812b_show();  // 刷新LED显示
+            } else {
+              key_param = 0;   // 其他按键不处理双击事件
+            }
+            break;
+        
         case KEY_EVENT_RELEASE:
             // 释放可做额外处理
             break;

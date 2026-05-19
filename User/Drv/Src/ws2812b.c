@@ -21,10 +21,7 @@ void ws2812b_init(){
     // 初始化TIM1为PWM模式，配置DMA等（在main.c中完成）
     // 这里不需要额外的初始化代码，因为我们直接使用HAL库的TIM和DMA功能
     ws2812b_clear_all(); // 初始化时清除所有灯珠
-    for (int i = 0; i < NUM_LEDS; i++) {
-        ws2812b_set_color(i, 0, 0, 0); // 初始化所有灯珠为关闭状态
-    }
-    ws2812b_show(); // 刷新显示
+    
 }
 
 // 设置指定索引灯珠的颜色 (索引从0开始)

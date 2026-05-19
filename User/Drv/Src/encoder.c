@@ -8,7 +8,7 @@ static int16_t last_count = 0;       // 上次读取的计数值
 static int32_t total_max = 300;      // 最大计数值
 static int32_t total_min = 0;        // 最小计数值
 
-// TIM3 初始化（编码器模式）
+// TIM4 初始化（编码器模式）
 void encoder_init(void) {
     // 使能计数器
     HAL_TIM_Encoder_Start(&htim4, TIM_CHANNEL_ALL);
@@ -36,7 +36,7 @@ int32_t encoder_get_total_count(void) {
     return total_overflow;
 }
 
-// 清零当前计数值（重置 TIM3->CNT 为 0）
+// 清零当前计数值（重置 TIM4->CNT 为 0）
 void encoder_reset_count(void) {
     __HAL_TIM_DISABLE_IT(&htim4, TIM_IT_UPDATE);   // 禁用溢出中断（未使用）
     TIM4->CNT = 0;

@@ -4,11 +4,13 @@
 #include "stdint.h"
 #include "stdbool.h"
 
-// 按键引脚定义（PB0~PB8）
-#define KEY_PIN_START   GPIO_PIN_0
-#define KEY_PIN_END     GPIO_PIN_8
-#define KEY_PORT        GPIOB
-#define KEY_COUNT       9   // 按键数量
+// 按键数量
+#define KEY_COUNT       10   // 按键数量
+
+#define KEY_DOUBLE_CLICK_ENABLE_MASK   (1 << 9)   // 仅按键ID=9（编码器按键）启用双击
+
+// 双击检测窗口（ms）
+#define KEY_DOUBLE_CLICK_TIMEOUT_MS    300
 
 // 扫描周期（ms），建议5~10ms
 #define KEY_SCAN_INTERVAL_MS    5
@@ -31,7 +33,8 @@ typedef enum {
     KEY_EVENT_LONG_PRESS,   // 长按（按住超过长按时间）
     KEY_EVENT_REPEAT,       // 长按重复触发（每隔一段时间自动触发）
     KEY_EVENT_RELEASE,      // 释放（任意释放）
-    KEY_EVENT_COMBO         // 组合键（由多个按键同时触发）
+    KEY_EVENT_COMBO,        // 组合键（由多个按键同时触发）
+    KEY_EVENT_DOUBLE_CLICK  // 新增：双击事件
 } KeyEvent_t;
 
 // 按键ID（0~8）
