@@ -54,7 +54,7 @@ void buy_ammo(uint16_t target){
         return; // 无效参数
     }
 
-    send_key_press(VK_O);  // 发送按键操作（如打开购买界面）
+    send_key_press(VK_I);  // 发送按键操作（如打开购买界面）
 
     // 按从大到小的顺序分解数量：100, 50, 20, 10
     uint16_t remaining = target;
